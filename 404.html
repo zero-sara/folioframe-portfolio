@@ -32,6 +32,30 @@ button,a { font:inherit; } button { color:inherit; }
  * 产品标识必须恒定，所以在哪套主题下都是同一个橙色。 */
 .ff-lockup em { font-style:normal; color:#e64e2e; margin-left:4px; font-family:'DM Mono',monospace; font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
 
+/* —— 页脚品牌标记 ——
+ * 用户要求在页脚署名行前固定显示一个小 Logo，**不可删除**，属发布内容的一部分。
+ * 刻意"小面积、低调"：18px 图形 + 常规 12px 文字，不抢主体内容、不遮挡任何素材。
+ * 与 .ff-lockup / .st-brand / .ve-brand 同一套品牌语言（深色字 + 固定橘红点缀）。 */
+.ff-foot-brand { display:inline-flex; align-items:center; gap:7px; }
+.ff-foot-mark {
+  width:18px; height:18px; flex:0 0 18px;
+  border-radius:5px; object-fit:cover;
+  /* 深色方块图标压在浅色页面上需要一点边界，否则边缘会"糊"进背景 */
+  box-shadow:0 0 0 1px rgba(28,36,51,.14);
+  vertical-align:middle;
+}
+.ff-foot-text { letter-spacing:.02em; }
+/* 移动端：整页变窄时标记不跟着放大（避免"画布缩放把 Logo 顶大了"） */
+@media (max-width:640px){
+  .ff-foot-mark { width:16px; height:16px; flex-basis:16px; border-radius:4px; }
+  .ff-foot-brand { gap:6px; }
+}
+/* 深色主题下，深色方块图标会与背景融为一体 → 换成亮描边保证可辨认 */
+html[data-theme="dark"] .ff-foot-mark,
+body.theme-dark .ff-foot-mark { box-shadow:0 0 0 1px rgba(255,255,255,.30); }
+/* 打印（导出 PDF）时页脚本就被隐藏，这里一并兜底，避免残留孤立图形 */
+@media print { .ff-foot-brand { display:none !important; } }
+
 /* Hero — 不再展示 About Me 全文，只展示一句 intro，避免重复 */
 .hero { min-height:0; display:flex; flex-direction:column; justify-content:flex-end; padding-bottom:var(--editor-spacing,48px); border-bottom:1px solid var(--ink); }
 /* 眉标(Selected works) 与姓名同属「Hero 标题块」：眉标在下方的间距由间距杆控制
@@ -478,6 +502,35 @@ body:not(.ve-embed) .ve-pixel{transition:none}
 .showreel-empty{border:1px dashed #77736b;padding:18px;color:#d4d0c6;font-size:13px;line-height:1.7}
 .ch-role{color:#a9a49a;font-size:13px}
 
+/* —— Showreel 外部来源 ——
+ * 两类来源的能力不同（直链可跳章节 / 平台播放器不可跳），视觉上也要能区分：
+ * 内嵌播放器给 16:9 容器；不可跳转的章节列表降低对比度并禁止指针，避免"看起来能点"。 */
+.showreel-embed{position:relative;width:100%;aspect-ratio:16/9;background:#101010;border-radius:2px;overflow:hidden}
+.showreel-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.showreel-note{margin:12px 0 0;font-size:12px;line-height:1.7;color:#c8c3b8;border-left:2px solid var(--accent);padding-left:10px}
+.showreel-alt{margin:14px 0 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.showreel-alt-label{font:600 11px/1 'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:#a9a49a}
+/* 外部来源下章节仍展示（是内容记录），但明确"不可点击" */
+.chapters-inert{opacity:.62}
+.chapters-inert .chapter{cursor:default}
+.chapters-inert .chapter:hover{color:inherit}
+/* 移动端：章节表在窄屏改为两列，避免挤压 */
+@media (max-width:640px){
+  .chapters-inert .chapter{grid-template-columns:28px 1fr}
+  .showreel{padding:16px}
+}
+
+/* —— 公开页轻量提示（章节不可跳转 / 视频未就绪时给解释，而不是静默无反应）—— */
+.ff-toast{
+  position:fixed;left:50%;bottom:32px;transform:translate(-50%,14px);
+  max-width:min(92vw,560px);
+  background:#1c2433;color:#fff;font:13px/1.6 'Noto Sans SC',system-ui,sans-serif;
+  padding:11px 16px;border-radius:8px;
+  opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease;
+  z-index:9999;box-shadow:0 6px 24px rgba(0,0,0,.22);
+}
+.ff-toast.on{opacity:1;transform:translate(-50%,0)}
+
 @media(max-width:720px){
   .project-head{flex-wrap:wrap}
   .project-head .project-role{margin-left:0}
@@ -559,7 +612,7 @@ body:not(.ve-embed) .ve-pixel{transition:none}
 .pub-prog-bar{height:8px;border-radius:5px;background:#e4e4ea;overflow:hidden}
 .pub-prog-bar i{display:block;height:100%;background:linear-gradient(90deg,#1a7f37,#2ea043);transition:width .6s ease;min-width:2px}
 .pub-prog-pct{font-size:12px;color:var(--muted);margin-top:5px;text-align:right;font-variant-numeric:tabular-nums}
-/* —— Provider 切换（Cloudflare / GitHub Pages） —— */
+/* —— Provider 切换（GitHub Pages 默认 / CloudBase 可选 / 导出 ZIP） —— */
 .publink-tabs{display:flex;gap:6px;margin:0 0 14px;border-bottom:1px solid var(--line)}
 .publink-tab{padding:7px 14px;border:1px solid transparent;border-bottom:none;background:none;color:var(--ink);opacity:.6;font:12px 'DM Mono',monospace;letter-spacing:.03em;cursor:pointer;border-radius:6px 6px 0 0;margin-bottom:-1px}
 .publink-tab:hover{opacity:.9}
@@ -1400,6 +1453,117 @@ function VE_staticTextIsCustom(design, id){
   const map = (design && design.staticText) || {};
   return typeof map[id] === 'string' && map[id].trim() !== '' && map[id] !== VE_STATIC_TEXT_DEFAULTS[id];
 }
+
+// —— 轻量提示（公开浏览页用）——
+// 公开页没有编辑器那套 toastInCanvas，但章节点击失败/外部来源不可跳转时
+// **必须给用户一句话解释**，否则就是"点了没反应"。
+// 这里做成最小可用：单例 DOM + 自动消失，不依赖任何外部样式。
+function __ffToast(msg){
+  try{
+    let el=document.getElementById('ff-toast');
+    if(!el){
+      el=document.createElement('div');
+      el.id='ff-toast'; el.className='ff-toast';
+      document.body.appendChild(el);
+    }
+    el.textContent=msg;
+    el.classList.add('on');
+    clearTimeout(el.__t);
+    el.__t=setTimeout(()=>el.classList.remove('on'), 3600);
+  }catch(e){}
+}
+window.__ffToast=__ffToast;
+
+
+// —— Showreel 视频来源解析 ——
+// 用户要求：既能用本地/直链 MP4（保留 Chapter 跳转），也能挂 Bilibili / 腾讯视频等外部链接。
+// 两类来源的能力**本质不同**，这里必须如实区分，不能假装外部播放器也支持章节跳转：
+//
+//  A. 直接媒体（本地文件 / 直链 mp4/m3u8/webm…）
+//     → 走原生 <video>，currentTime 可写 → Chapter 跳转**完全可用**。
+//  B. 平台页面链接（B站 / 腾讯视频 / 优酷…）
+//     → 只能内嵌 iframe 播放器或跳转。宿主页面**拿不到**播放器的 currentTime
+//       （跨域 iframe 无控制接口）→ **Chapter 跳转不可用**，必须在界面上说明。
+//       另外 B 站 iframe 需要带 ?page=&autoplay= 且受平台策略影响，未必在所有网络下可播。
+const SHOWREEL_platformOf=(rawUrl)=>{
+  const s=String(rawUrl||'');
+  if(/bilibili\.com|b23\.tv/i.test(s))  return {id:'bilibili', name:'Bilibili', embed:'iframe', chapters:false};
+  if(/v\.qq\.com/i.test(s))             return {id:'tencent',  name:'腾讯视频', embed:'iframe', chapters:false};
+  if(/youku\.com/i.test(s))             return {id:'youku',    name:'优酷',   embed:'iframe', chapters:false};
+  if(/youtube\.com|youtu\.be/i.test(s)) return {id:'youtube',  name:'YouTube',embed:'iframe', chapters:false};
+  if(/\.(mp4|webm|ogv|mov|m4v|m3u8)(\?|#|$)/i.test(s)) return {id:'direct', name:'direct', embed:'video', chapters:true};
+  return {id:'other', name:'外部链接', embed:'link', chapters:false};
+};
+// 从 B 站页面 URL 里提取 BV 号，拼成官方 iframe 播放地址
+const SHOWREEL_biliEmbed=(rawUrl)=>{
+  const m=String(rawUrl||'').match(/(BV[0-9A-Za-z]{10})/);
+  if(!m) return '';
+  const pm=String(rawUrl).match(/[?&]p=(\d+)/);
+  let e='https://player.bilibili.com/player.html?bvid='+m[1]+'&high_quality=1&danmaku=0';
+  if(pm) e+='&p='+pm[1];
+  return e;
+};
+const SHOWREEL_resolveSource=(sp, localUrl, chaptersHtml)=>{
+  const ext=String(sp.externalVideoUrl||'').trim();
+  const hasLocal=!!localUrl;
+  const hasChapters=!!(chaptersHtml&&chaptersHtml.length);
+  // 1) 有本地文件 → 永远优先本地（章节跳转可靠），外部链接降级为"备用观看方式"
+  if(hasLocal){
+    const player=`<div class="showreel-video"><video controls preload="metadata" playsinline class="pm-video-el" data-vurl="${encodeURI(localUrl)}" data-vname="${esc((sp.media&&sp.media.name)||localUrl.split('/').pop())}" onerror="__veVideoErr(this)" src="${localUrl}"></video></div>`;
+    const extra=ext?`<div class="showreel-alt"><span class="showreel-alt-label">备用观看方式</span><a class="button" href="${esc(ext)}" target="_blank" rel="noopener">${esc(SHOWREEL_platformOf(ext).name)} 打开 ↗</a></div>`:'';
+    return {player, extra};
+  }
+  // 2) 只有外部链接
+  if(!ext){
+    return {player:`<div class="showreel-empty">这个 Showreel 项目还没有视频：到「文本编辑 → Showreel」上传本地视频，或填一个外部视频链接。</div>`, extra:''};
+  }
+  const pf=SHOWREEL_platformOf(ext);
+  // 2a) 直链媒体 → 当普通视频播，章节可用
+  if(pf.embed==='video'){
+    const player=`<div class="showreel-video"><video controls preload="metadata" playsinline crossorigin="anonymous" class="pm-video-el" data-vurl="${encodeURI(ext)}" data-vname="${esc(ext.split('/').pop())}" onerror="__veVideoErr(this)" src="${ext}"></video></div>`;
+    return {player, extra:''};
+  }
+  // 2b) 平台页面 → 能内嵌就内嵌，并**明确告知章节跳转不可用**
+  let embedUrl='';
+  if(pf.id==='bilibili') embedUrl=SHOWREEL_biliEmbed(ext);
+  const note=`<p class="showreel-note">此视频托管在 <b>${esc(pf.name)}</b>，由该平台的播放器播放。
+    注意：<b>章节时间点跳转在此来源下不可用</b>（播放器控制权在平台手里，页面无法跳转）。
+    如需章节跳转，请改用直链 MP4。</p>`;
+  const alt=`<div class="showreel-alt"><span class="showreel-alt-label">外部观看入口</span><a class="button" href="${esc(ext)}" target="_blank" rel="noopener">在 ${esc(pf.name)} 打开 ↗</a></div>`;
+  const player = embedUrl
+    ? `<div class="showreel-embed"><iframe src="${esc(embedUrl)}" scrolling="no" frameborder="0" framespacing="0" allowfullscreen="true" loading="lazy" title="外部视频播放器（${esc(pf.name)}）"></iframe></div>`
+    : `<div class="showreel-empty">这是一个 <b>${esc(pf.name)}</b> 页面链接，无法在页面内直接播放。请用下方入口在新标签页打开。</div>`;
+  // 章节列表仍展示（它们是内容记录），但要标明不可点击跳转
+  const chBlock=hasChapters
+    ? `<div class="chapters chapters-inert" title="当前视频来源不支持跳转">${chaptersHtml}</div>`
+    : '';
+  return {player:player+note+chBlock, extra:alt};
+};
+
+// —— 页脚品牌标记（FolioFrame）——
+// 用户明确要求：Logo 固定出现在页脚署名行，**不可删除**，作为发布内容的一部分。
+// 因此这里刻意**不挂 data-field / data-ve-item**：
+//   · 不挂 data-field  → 不能被"删除媒体 / 删除文字"类操作移除
+//   · 不挂 data-ve-item → Visual Editor 的选择框 / 拖拽控制器不会作用到它
+// 这样它才是"产品标识"而不是"用户内容" —— 与顶栏 .ff-lockup 同一个定位。
+// 署名文字本身仍是内容（可改），标识图形是产品固定件（不可删）。
+function VE_renderFooterBrand(profile){
+  const p = profile || {};
+  const text = [p.name, p.role].filter(Boolean).join(' · ');
+  return '<span class="ff-foot-brand" title="FolioFrame">'
+       +   '<img class="ff-foot-mark" src="' + FF_FOOT_MARK + '" alt="" width="18" height="18" loading="lazy" onerror="this.style.display=\'none\'">'
+       +   '<span class="ff-foot-text">' + esc(text) + '</span>'
+       + '</span>';
+}
+// 页脚标记图片地址：与 favicon 同一个品牌资源（已随 bundle 打包，见 build_public_bundle）。
+// 发布出去的站点可能挂在 /<repo>/ 子路径下，绝对 /media/... 会跑到域名根而 404，
+// 所以线上用相对路径；本地预览（服务挂在根）才用绝对路径。
+const FF_FOOT_MARK = (function(){
+  try {
+    if (window.__PUBLIC_VIEWER__) return 'media/brand/folioframe-mark-96.png';
+  } catch(e){}
+  return '/media/brand/folioframe-mark-96.png';
+})();
 // 渲染 Pixel Character：脸来自 Content(profile.avatar)，布局/显隐/轨迹来自 Design(design.pixel)。
 // 默认在 hero 右上（absolute 浮层，不挤压文字流）；若用户拖拽过则用 design.pixel.x/y；
 // 若设了活动轨迹(design.pixel.path)则初始落在轨迹起点。使 Pixel 成为独立可定位的 Canvas Element。
@@ -4202,8 +4366,10 @@ async function openPublishPanel(d){
   // ② 下载 PDF / 导出 HTML / ZIP（均来自已发布版）
   const tplQ = (window.__TPL__ && window.__TPL__!=='main') ? '&tpl='+encodeURIComponent(window.__TPL__) : '';
   dialog.querySelector('#export-pdf').onclick=()=>{ window.open('/portfolio/?mode=published&print=1'+tplQ,'_blank'); };
-  dialog.querySelector('#export-html').onclick=()=>{ window.open('/api/export/html'+tplQ,'_blank'); };
-  dialog.querySelector('#export-zip').onclick=()=>{ window.open('/api/export/zip'+tplQ,'_blank'); };
+  const tplQ2 = tplQ ? '?'+tplQ.slice(1) : '';   // tplQ 形如 '&tpl=x'，这里需首字母是 '?'
+  dialog.querySelector('#export-html').onclick=()=>{ window.open('/api/export/html'+tplQ2,'_blank'); };
+  // 「导出 ZIP」= 导出整个静态网站（可自行上传到任意托管），与发布面板③里的 ZIP 同一个后端。
+  dialog.querySelector('#export-zip').onclick=()=>{ window.location.href='/api/export/site-zip'+tplQ2; };
 
   // ④ 模板导出 / 导入
   dialog.querySelector('#export-template').onclick=()=>exportTemplateData(d);
@@ -4220,67 +4386,108 @@ let __deployedAt = 0, __deployedProvider = null; // 最近一次成功发布的�
 async function renderPublicLink(dialog){
   const body=document.getElementById('publink-body');
   if(!body) return;
-  let st={provider:'github', providers:{cloudflare:{configured:false,projectName:'',publicUrl:''}, github:{configured:false,login:'',publicUrl:''}}, publicUrl:'', deployedAt:''};
+  let st={provider:'github', providers:{cloudbase:{configured:false,envId:'',publicUrl:''}, github:{configured:false,login:'',publicUrl:''}}, publicUrl:'', deployedAt:''};
   try{ st=await fetch('/api/deploy/status',{cache:'no-store'}).then(r=>r.json()); }catch(e){}
   if(!window.__pubProvider) window.__pubProvider = st.provider || 'github';
-  const prov = window.__pubProvider==='cloudflare' ? 'cloudflare' : 'github';
-  const cf = (st.providers&&st.providers.cloudflare)||{configured:false,projectName:'',publicUrl:''};
+  const prov = window.__pubProvider==='cloudbase' ? 'cloudbase' : (window.__pubProvider==='zip' ? 'zip' : 'github');
+  const cb = (st.providers&&st.providers.cloudbase)||{configured:false,envId:'',publicUrl:''};
   const gh = (st.providers&&st.providers.github)||{configured:false,login:'',publicUrl:''};
   // 部署按钮：刚成功发布过且本次无媒体失败 → 显示「✓ 已更新 时:分」（绿色）；否则常规「更新/发布 FolioFrame」。
   const muFailed = (st.mediaUpload && (st.mediaUpload.failed || []).filter(Boolean).length) || 0;
   const justDeployed = !!__deployedAt && __deployedProvider === prov && !muFailed;
-  const deployBtnHtml = (baseLabel) => justDeployed
+  window.__ffDeployBtnHtml = (baseLabel) => justDeployed
     ? `<button class="publish-btn primary st-done" id="publink-deploy">✓ 已更新 ${new Date(__deployedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</button>`
     : `<button class="publish-btn primary" id="publink-deploy">${baseLabel}</button>`;
+  const deployBtnHtml = window.__ffDeployBtnHtml;
   body.innerHTML = `
     <div class="publink-tabs">
       <button class="publink-tab ${prov==='github'?'active':''}" data-prov="github">GitHub Pages</button>
-      <button class="publink-tab ${prov==='cloudflare'?'active':''}" data-prov="cloudflare">Cloudflare Pages</button>
+      <button class="publink-tab ${prov==='cloudbase'?'active':''}" data-prov="cloudbase">CloudBase（需腾讯云配置）</button>
+      <button class="publink-tab ${prov==='zip'?'active':''}" data-prov="zip">导出 ZIP</button>
     </div>
     <div id="publink-provider-body"></div>`;
   body.querySelectorAll('.publink-tab').forEach(b=>{ b.onclick=()=>{ window.__pubProvider=b.dataset.prov; renderPublicLink(dialog); }; });
   const pb=document.getElementById('publink-provider-body');
   if(prov==='github') await renderGithubSection(pb, gh);
-  else renderCloudflareSection(pb, cf);
+  else if(prov==='zip') renderZipSection(pb);
+  else renderCloudBaseSection(pb, cb);
   wirePublicLink(dialog, st);
 }
 
-function renderCloudflareSection(pb, cf){
+// —— 导出 ZIP：不是发布平台，而是把当前站点打包下载到本地 ——
+// 它与发布走**同一条打包链路**（build_public_bundle），所以"导出能看的，发布就能看"。
+// 设计上刻意不做成"又一个渠道"：不触网、不需要账号、不产生任何外部依赖。
+function renderZipSection(pb){
   if(!pb) return;
-  if(cf.configured && cf.publicUrl){
+  pb.innerHTML=`
+    <p class="publish-desc">把当前作品集导出为一个<b>完整静态网站 ZIP</b>，下载到本机。</p>
+    <div class="publish-hint">
+      <p><b>它是什么：</b>不是发布平台，而是一个「万能出口」。导出的包不需要 FolioFrame、不需要联网，解压后双击 <b>index.html</b> 就能离线浏览。</p>
+      <p><b>能用来做什么：</b>想放到国内平台（如腾讯云 EdgeOne Pages、CloudBase）时，把导出的 ZIP 直接拖到平台的上传页即可，<b>不需要填任何密钥</b>。</p>
+      <p><b>包里有什么：</b>index.html（样式脚本已内联）、media/ 媒体、以及一份 <b>folioframe-export.json</b> 导出清单。</p>
+      <p><b>包里绝不会有什么：</b>GitHub 令牌、腾讯云 SecretKey 等任何账号凭证 —— 一分都不会进包。</p>
+      <p class="publish-warn"><b>关于大文件：</b>默认<b>不打包超过 90MB 的单个媒体</b>（避免 ZIP 过大），这些文件会在清单和 README 里<b>逐条列出</b>，你可以单独压缩后补传。已打进包里但超过 25MB 的文件也会在 README 里标出——离线看不受影响，但部分平台上传时有单文件上限。</p>
+      <p style="font-size:12px;opacity:.72">确实想要"一份都不少"的离线副本？用下面的第二个按钮导出完整版（跳过体积限制，包会很大）。</p>
+    </div>
+    <div class="publish-actions">
+      <button class="publish-btn primary" id="publink-zip">导出网站 ZIP</button>
+      <button class="publish-btn" id="publink-zip-all">导出完整版（含大媒体）</button>
+    </div>
+    <div id="publink-zip-result"></div>`;
+  const q='?tpl='+encodeURIComponent(window.__tpl||'main');
+  const btn=document.getElementById('publink-zip');
+  if(btn) btn.onclick=()=>{ window.location.href='/api/export/site-zip'+q; };
+  const btnAll=document.getElementById('publink-zip-all');
+  if(btnAll) btnAll.onclick=()=>{ window.location.href='/api/export/site-zip'+q+'&include=all'; };
+}
+
+function renderCloudBaseSection(pb, cb){
+  if(!pb) return;
+  const btn = window.__ffDeployBtnHtml || ((l)=>`<button class="publish-btn primary" id="publink-deploy">${l}</button>`);
+  const warn = `<div class="publish-hint">
+      <p class="publish-warn"><b>先说清楚：这不是 GitHub 那种「点一下授权就好」。</b>腾讯云没有面向第三方应用的授权机制，你需要自己注册腾讯云账号、完成实名、创建一个 CloudBase 环境，再把凭证填到这里。配置大约需要 10~20 分钟。</p>
+      <p><b>为什么值得：</b>服务器在国内，访客打开速度快；单个文件大小限制很宽，70~100MB 的视频可以直接放。</p>
+      <p class="publish-warn"><b>免费额度的真实情况：</b>免费体验版每月 3000 资源点（约合十几 GB 流量），<b>用完后网站会停服</b>（不会自动扣费，但会打不开）；每 6 个月需要手动续期一次。默认域名属于官方定位的「开发测试」用途，可能有访问频率限制或浏览器安全提示中间页；要彻底去掉需绑自定义域名，而那需要 ICP 备案。</p>
+    </div>`;
+  if(cb.configured && cb.publicUrl){
     pb.innerHTML=`
       <div class="publish-status">
-        <div class="publish-status-row"><span class="publish-status-label">Provider</span><span class="publish-tag">Cloudflare Pages</span></div>
-        <div class="publish-status-row"><span class="publish-status-label">项目</span><span class="publish-tag">${esc(cf.projectName)}</span></div>
+        <div class="publish-status-row"><span class="publish-status-label">平台</span><span class="publish-tag">CloudBase（国内部署）</span></div>
+        <div class="publish-status-row"><span class="publish-status-label">环境</span><span class="publish-tag">${esc(cb.envId||'')}</span></div>
         <div class="publish-status-row"><span class="publish-status-label">状态</span><span class="publish-tag">已发布（Published）</span></div>
       </div>
-      <p class="publish-desc">公网地址（任何人无需安装 FolioFrame 即可浏览）：</p>
+      <p class="publish-desc">公开地址（任何人无需安装 FolioFrame 即可浏览）：</p>
       <div class="publish-link-row">
-        <input class="publish-link-input" id="publink-url" readonly value="${esc(cf.publicUrl)}">
+        <input class="publish-link-input" id="publink-url" readonly value="${esc(cb.publicUrl)}">
         <button class="publish-btn" id="publink-copy">复制</button>
       </div>
       <div class="publish-actions">
-        <a class="publish-btn" id="publink-open" href="${esc(cf.publicUrl)}" target="_blank" rel="noopener">打开公开作品集 ↗</a>
-        ${deployBtnHtml('重新发布到公网')}
+        <a class="publish-btn" id="publink-open" href="${esc(cb.publicUrl)}" target="_blank" rel="noopener">打开作品集 ↗</a>
+        ${btn('重新发布')}
         <button class="publish-btn" id="publink-reconfig">重新配置</button>
-      </div>`;
-  } else if(cf.configured){
+      </div>
+      <p class="publish-desc">想省去配置？也可以改用上面的「导出 ZIP」，把包拖到腾讯云的上传页。</p>`;
+  } else if(cb.configured){
     pb.innerHTML=`
       <div class="publish-status">
-        <div class="publish-status-row"><span class="publish-status-label">Provider</span><span class="publish-tag">Cloudflare Pages</span></div>
-        <div class="publish-status-row"><span class="publish-status-label">项目</span><span class="publish-tag">${esc(cf.projectName)}</span></div>
-        <div class="publish-status-row"><span class="publish-status-label">状态</span><span class="publish-tag">Ready（尚未发布）</span></div>
+        <div class="publish-status-row"><span class="publish-status-label">平台</span><span class="publish-tag">CloudBase（国内部署）</span></div>
+        <div class="publish-status-row"><span class="publish-status-label">环境</span><span class="publish-tag">${esc(cb.envId||'')}</span></div>
+        <div class="publish-status-row"><span class="publish-status-label">状态</span><span class="publish-tag">已配置（尚未发布）</span></div>
       </div>
       <div class="publish-actions">
-        ${deployBtnHtml('发布到公网')}
+        ${btn('发布到 CloudBase')}
         <button class="publish-btn" id="publink-reconfig">重新配置</button>
       </div>`;
   } else {
     pb.innerHTML=`
-      <p class="publish-desc">尚未配置 Public Hosting。配置一次 Cloudflare 免费账号后，即可一键把作品集发布到公网（<b>https://&lt;项目名&gt;.pages.dev</b>），别人无需安装 FolioFrame 即可浏览。</p>
+      <p class="publish-desc">CloudBase 是<b>国内部署的备选渠道</b>：服务器在国内，访客打开快，单文件大小限制很宽。</p>
+      ${warn}
       <div class="publish-actions">
-        <button class="publish-btn primary" id="publink-setup">配置 Public Hosting</button>
+        <button class="publish-btn primary" id="publink-setup">填写腾讯云配置</button>
+        <button class="publish-btn" id="publink-zip-from-cb">改用「导出 ZIP」（无需配置）</button>
       </div>`;
+    const z=document.getElementById('publink-zip-from-cb');
+    if(z) z.onclick=()=>{ window.__pubProvider='zip'; renderPublicLink(document.getElementById('publish-dialog')); };
   }
 }
 
@@ -4507,7 +4714,8 @@ function wirePublicLink(dialog, st){
   };
   const deploy=document.getElementById('publink-deploy');
   if(deploy) deploy.onclick=async()=>{
-    const provider = window.__pubProvider==='github' ? 'github' : 'cloudflare';
+    const provider = window.__pubProvider==='cloudbase' ? 'cloudbase' : 'github';
+    const baseLabel = provider==='github' ? '更新 FolioFrame' : '发布到 CloudBase';
     deploy.disabled=true; deploy.textContent='发布中…';
     const prog=document.createElement('div');
     prog.id='publink-progress'; prog.className='pub-progress'; prog.style.display='none';
@@ -4543,38 +4751,52 @@ function wirePublicLink(dialog, st){
       });
     }catch(e){
       clearInterval(progTimer); prog.style.display='none';
-      deploy.disabled=false; deploy.textContent= (provider==='github'?'更新 FolioFrame':'发布到公网');
+      deploy.disabled=false; deploy.textContent= baseLabel;
       const err=document.createElement('p'); err.className='publish-err'; err.textContent='发布失败：'+e.message;
       host.appendChild(err);
+      // CloudBase 未完成自动部署时，明确给出可行动替代路径，而不是让用户卡在这。
+      if(provider==='cloudbase'){
+        const alt=document.createElement('p'); alt.className='publish-desc';
+        alt.innerHTML='可以改用「<b>导出 ZIP</b>」：导出后把包直接拖到腾讯云的上传页，同样能拿到国内可访问的地址，且不需要配置密钥。';
+        host.appendChild(alt);
+      }
     }
   };
 }
 
 function renderSetupForm(body, prefillName){
   body.innerHTML=`
-    <p class="publish-desc">只需配置一次：到 Cloudflare 免费账号拿 <b>Account ID</b> 与 <b>API Token</b>（权限模板选 <b>Cloudflare Pages: Edit</b>）。保存后点「发布到公网」即可拿到真实公网链接。Token 只存在本机，绝不写进作品集数据或网页。</p>
-    <label class="st-field-label" for="cf-account">Account ID</label>
-    <input class="publish-input" id="cf-account" placeholder="Cloudflare Account ID">
-    <label class="st-field-label" for="cf-token">API Token</label>
-    <input class="publish-input" id="cf-token" type="password" placeholder="Cloudflare API Token（Pages: Edit）">
-    <label class="st-field-label" for="cf-name">项目名（可选，决定 URL，留空按姓名自动生成）</label>
-    <input class="publish-input" id="cf-name" value="${esc(prefillName)}" placeholder="如 folioframe-zhangsan">
+    <p class="publish-desc">填入你自己腾讯云 CloudBase 环境的凭证。这些值只有你本人能在腾讯云控制台看到，<b>只保存在这台电脑上</b>，不会进入作品集数据、网页或导出的 ZIP。</p>
+    <div class="publish-hint">
+      <p><b>去哪里拿：</b>① <b>EnvId</b>：腾讯云 CloudBase 控制台 → 环境概览 → 环境 ID（形如 <code>my-env-1a2b3c</code>）。② <b>SecretId / SecretKey</b>：腾讯云控制台 → 访问管理 CAM → API 密钥管理 → 新建密钥。</p>
+      <p class="publish-warn"><b>安全提醒：</b>SecretKey 相当于账号密码，请勿截图分享、勿提交到 Git。建议在 CAM 里为这个密钥只授予 CloudBase 相关权限，而不是主账号全权限。</p>
+    </div>
+    <label class="st-field-label" for="cb-env">EnvId（环境 ID）</label>
+    <input class="publish-input" id="cb-env" placeholder="如 my-env-1a2b3c" autocomplete="off">
+    <label class="st-field-label" for="cb-sid">SecretId</label>
+    <input class="publish-input" id="cb-sid" placeholder="AKIDxxxxxxxxxxxxxxxx" autocomplete="off">
+    <label class="st-field-label" for="cb-skey">SecretKey</label>
+    <input class="publish-input" id="cb-skey" type="password" placeholder="只保存在本机，不会显示在页面上" autocomplete="new-password">
+    <label class="st-field-label" for="cb-path">部署子目录（可选，留空为站点根目录）</label>
+    <input class="publish-input" id="cb-path" placeholder="如 portfolio">
     <div class="publish-actions">
       <button class="publish-btn" id="publink-cancel-cfg">取消</button>
-      <button class="publish-btn primary" id="publink-save-cfg">保存并启用</button>
+      <button class="publish-btn primary" id="publink-save-cfg">保存配置</button>
     </div>`;
-  document.getElementById('publink-cancel-cfg').onclick=()=>{ document.getElementById('publink-setup')&&(document.getElementById('publink-setup').disabled=false); renderPublicLink(document.getElementById('publish-dialog')); };
+  const cancel=document.getElementById('publink-cancel-cfg');
+  if(cancel) cancel.onclick=()=>{ window.__pubProvider='cloudbase'; renderPublicLink(document.getElementById('publish-dialog')); };
   document.getElementById('publink-save-cfg').onclick=async()=>{
-    const account=(document.getElementById('cf-account').value||'').trim();
-    const token=(document.getElementById('cf-token').value||'').trim();
-    const name=(document.getElementById('cf-name').value||'').trim();
-    if(!account||!token){ alert('Account ID 与 API Token 都必须填写'); return; }
+    const envId=(document.getElementById('cb-env').value||'').trim();
+    const sid=(document.getElementById('cb-sid').value||'').trim();
+    const skey=(document.getElementById('cb-skey').value||'').trim();
+    const path=(document.getElementById('cb-path').value||'').trim();
+    if(!envId||!sid||!skey){ alert('EnvId、SecretId、SecretKey 都必须填写'); return; }
     const btn=document.getElementById('publink-save-cfg'); btn.disabled=true; btn.textContent='保存中…';
     try{
-      const r=await fetch('/api/deploy/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:account,apiToken:token,projectName:name})}).then(x=>x.json());
+      const r=await fetch('/api/deploy/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'cloudbase',envId:envId,secretId:sid,secretKey:skey,path:path})}).then(x=>x.json());
       if(!r.ok)throw Error(r.error||'保存失败');
       await renderPublicLink(document.getElementById('publish-dialog'));
-    }catch(e){ alert('保存失败：'+e.message); btn.disabled=false; btn.textContent='保存并启用'; }
+    }catch(e){ alert('保存失败：'+e.message); btn.disabled=false; btn.textContent='保存配置'; }
   };
 }
 
@@ -4961,12 +5183,10 @@ async function main(){
   const buildShowreelProject=(sp, spi)=>{
     const u=url(sp.media); const ch=buildChapters(sp.chapters);
     const head=`<div class="srp-head"><h3 class="srp-name" data-field="showreel.projects.${spi}.name" data-single>${esc(sp.name||('Showreel 项目 '+String(spi+1).padStart(2,'0')))}</h3>${sp.role?`<span class="srp-role" data-field="showreel.projects.${spi}.role" data-single>${esc(sp.role)}</span>`:''}</div>`;
-    const ext=sp.externalVideoUrl?`<p class="showreel-ext"><a class="button" href="${esc(sp.externalVideoUrl)}" target="_blank" rel="noopener">打开视频 / 播放页 ↗</a></p>`:'';
-    const player=u
-      ? `<div class="showreel-video"><video controls preload="metadata" playsinline class="pm-video-el" data-vurl="${encodeURI(u)}" data-vname="${esc((sp.media&&sp.media.name)||u.split('/').pop())}" onerror="__veVideoErr(this)" src="${u}"></video></div>`
-      : `<div class="showreel-empty">这个 Showreel 项目还没有视频：到「文本编辑 → Showreel」上传本地视频，或填一个外部视频链接。</div>`;
-    return `<div class="showreel-project" data-ve-item="showreel.projects.${spi}" data-ve-kind="showreel-project">${head}<div class="showreel">${player}<div class="chapters">${ch}</div></div>${ext}</div>`;
+    const src=SHOWREEL_resolveSource(sp, u, ch);
+    return `<div class="showreel-project" data-ve-item="showreel.projects.${spi}" data-ve-kind="showreel-project">${head}<div class="showreel">${src.player}<div class="chapters">${ch}</div></div>${src.extra}</div>`;
   };
+
   const srProjects=(d.showreel.projects||[]);
   const showreelModule=srProjects.length
     ? srProjects.map((sp,spi)=>buildShowreelProject(sp,spi)).join('')
@@ -5069,7 +5289,7 @@ async function main(){
       ${renderDirectory(order)}
     </section>
     ${rzUrl?`<section class="resume"><h2>Resume</h2><div class="buttons"><button class="button" id="view-resume-btn" type="button">View Resume</button></div></section>`:''}
-    <footer class="footer">${esc(d.profile.name)} · ${esc(d.profile.role)}</footer>
+    <footer class="footer">${VE_renderFooterBrand(d.profile)}</footer>
     ${rzUrl?`<div class="resume-modal" id="resume-modal" hidden>
       <div class="resume-modal-backdrop" data-resume-close></div>
       <div class="resume-modal-card" id="resume-modal-card" role="dialog" aria-modal="true" aria-label="Resume">
@@ -5187,7 +5407,16 @@ async function main(){
     const chapters = scope.querySelectorAll('.chapter');
     chapters.forEach(b => b.onclick = () => {
       const v = scope.querySelector('video.pm-video-el');
-      if (!v || !v.isConnected) return;
+      // 外部平台来源（B站/腾讯视频等）：章节列表只作记录展示，点击给出明确解释，
+      // 而不是"点了没反应"——静默失效是最让人困惑的行为。
+      if (scope.querySelector('.showreel-embed') || scope.querySelector('.chapters-inert')) {
+        __ffToast && __ffToast('当前视频托管在外部平台，播放器不支持跳转。如需章节跳转请改用直链 MP4。');
+        return;
+      }
+      if (!v || !v.isConnected) {
+        __ffToast && __ffToast('视频还没准备好或加载失败，暂时无法跳转到该章节。');
+        return;
+      }
       try { v.currentTime = +b.dataset.start; v.play(); } catch (_) {}
     });
     const v0 = scope.querySelector('video.pm-video-el');
@@ -5391,6 +5620,8 @@ async function main(){
 // window.__veDirect / window.__veSetEntryOpen / window.__veWireFree 同思路。
 window.__veDebug = {
   freeContainerFor, freeContainerEl, freeAnchorFromClientPoint, VE_renderFreeLayer,
+  // 外部视频来源判定：纯函数，方便在控制台/自动化里逐个 URL 验证归类是否正确。
+  SHOWREEL_platformOf, SHOWREEL_resolveSource, SHOWREEL_biliEmbed,
 };
 
 main().catch(e=>document.querySelector('#app').textContent=e.message);
@@ -5403,7 +5634,14 @@ main().catch(e=>document.querySelector('#app').textContent=e.message);
     const tick = () => { const el = document.querySelector(selector); if (el || !tries--) resolve(el); else setTimeout(tick, 50); }; tick();
   });
   const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
-  async function loadDesign() { try { return await fetch('/api/design?fresh=' + Date.now(), { cache: 'no-store' }).then(r => r.json()); } catch (_) { return {}; } }
+  // 发布的静态站点 / 导出 ZIP 里没有 FolioFrame 后端：Design 数据已经内联进
+  // window.__PORTFOLIO_DESIGN__（见 build_public_bundle），直接读它即可。
+  // 这里曾经无条件 fetch('/api/design')，于是每一次公开站点加载都会发一次注定 404 的
+  // 请求（file:// 下变成 net::ERR_FILE_NOT_FOUND），纯粹是噪音。
+  async function loadDesign() {
+    try { if (window.__PUBLIC_VIEWER__) return window.__PORTFOLIO_DESIGN__ || {}; } catch (_) {}
+    try { return await fetch('/api/design?fresh=' + Date.now(), { cache: 'no-store' }).then(r => r.json()); } catch (_) { return {}; }
+  }
   function route(hero, pixel) {
     const width = Math.max(1, hero.clientWidth);
     const rule = document.querySelector('.hero-rule');
