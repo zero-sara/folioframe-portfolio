@@ -4441,18 +4441,40 @@ function renderZipSection(pb){
   if(btnAll) btnAll.onclick=()=>{ window.location.href='/api/export/site-zip'+q+'&include=all'; };
 }
 
+// —— CloudBase：腾讯云静态网站托管（国内部署）——
+// 文案统一为官方口径：不写死任何易变的配额 / 价格 / 套餐数字，规格一律指向官方文档。
+// ⚠ 改这里必须同步 studio/studio.js 的 stRenderCloudBaseSection / stRenderCloudBaseSetup。
+const CB_OFFICIAL_LINKS = '<a href="https://cloud.tencent.com/document/product/876/46900" target="_blank" rel="noopener">静态网站托管 ↗</a>　'
+  + '<a href="https://cloudbase.net/pricing" target="_blank" rel="noopener">定价与套餐说明 ↗</a>';
+function cbDocsHtml(){
+  return `<p><b>用途：</b>腾讯云 CloudBase 静态网站托管，可将当前作品集部署到国内节点。</p>
+      <p><b>能力：</b>静态网页托管、CDN 分发与 HTTPS；支持网页、图片及媒体资源的部署。</p>
+      <p><b>需要：</b>腾讯云账号、已完成实名认证、已创建 CloudBase 环境。</p>
+      <p><b>规格：</b>服务规格、配额、计费与限制，以腾讯云官方最新规则为准。</p>
+      <p><b>官方文档：</b>${CB_OFFICIAL_LINKS}</p>`;
+}
+function cbSetupNotesHtml(){
+  return `<p><b>配置须知</b></p>
+      <p>· 需要腾讯云账号</p>
+      <p>· 需要完成实名认证</p>
+      <p>· 需要创建 CloudBase 环境，并取得环境 ID（EnvId）</p>
+      <p>· 免费方案及其服务限制，以官方最新规则为准</p>
+      <p>· 免费环境可能存在访问、配额、续期或服务限制</p>
+      <p>· 网页上传通道存在单文件大小限制，官方各文档的口径存在差异，请以官方文档为准；大媒体建议使用 CloudBase CLI 部署</p>
+      <p>· 使用前请确认当前套餐与平台规则</p>`;
+}
+function cbLinksRowHtml(){
+  return `<p class="publish-desc" style="margin-top:10px;font-size:12px;opacity:.72">官方文档：${CB_OFFICIAL_LINKS}</p>`;
+}
 function renderCloudBaseSection(pb, cb){
   if(!pb) return;
   const btn = window.__ffDeployBtnHtml || ((l)=>`<button class="publish-btn primary" id="publink-deploy">${l}</button>`);
-  const warn = `<div class="publish-hint">
-      <p class="publish-warn"><b>先说清楚：这不是 GitHub 那种「点一下授权就好」。</b>腾讯云没有面向第三方应用的授权机制，你需要自己注册腾讯云账号、完成实名、创建一个 CloudBase 环境，再把凭证填到这里。配置大约需要 10~20 分钟。</p>
-      <p><b>为什么值得：</b>服务器在国内，访客打开速度快；单个文件大小限制很宽，70~100MB 的视频可以直接放。</p>
-      <p class="publish-warn"><b>免费额度的真实情况：</b>免费体验版每月 3000 资源点（约合十几 GB 流量），<b>用完后网站会停服</b>（不会自动扣费，但会打不开）；每 6 个月需要手动续期一次。默认域名属于官方定位的「开发测试」用途，可能有访问频率限制或浏览器安全提示中间页；要彻底去掉需绑自定义域名，而那需要 ICP 备案。</p>
-    </div>`;
+  // 部署代码已接入真实 CloudBase CLI 链路，但本机尚未用真实账号跑通端到端发布 —— 如实标注。
+  const notVerified = `<p class="publish-desc" style="color:#9a6700"><b>当前状态：</b>部署代码已接入真实 CloudBase CLI 链路（密钥登录 + 静态托管上传），填入你自己的腾讯云凭证后即可真实发布；尚未用真实账号完成端到端发布验证。</p>`;
   if(cb.configured && cb.publicUrl){
     pb.innerHTML=`
       <div class="publish-status">
-        <div class="publish-status-row"><span class="publish-status-label">平台</span><span class="publish-tag">CloudBase（国内部署）</span></div>
+        <div class="publish-status-row"><span class="publish-status-label">平台</span><span class="publish-tag">CloudBase 静态网站托管</span></div>
         <div class="publish-status-row"><span class="publish-status-label">环境</span><span class="publish-tag">${esc(cb.envId||'')}</span></div>
         <div class="publish-status-row"><span class="publish-status-label">状态</span><span class="publish-tag">已发布（Published）</span></div>
       </div>
@@ -4466,22 +4488,26 @@ function renderCloudBaseSection(pb, cb){
         ${btn('重新发布')}
         <button class="publish-btn" id="publink-reconfig">重新配置</button>
       </div>
-      <p class="publish-desc">想省去配置？也可以改用上面的「导出 ZIP」，把包拖到腾讯云的上传页。</p>`;
+      ${cbLinksRowHtml()}
+      <p class="publish-desc">也可以改用「导出 ZIP」，把包上传到静态网站托管，无需密钥。</p>`;
   } else if(cb.configured){
     pb.innerHTML=`
       <div class="publish-status">
-        <div class="publish-status-row"><span class="publish-status-label">平台</span><span class="publish-tag">CloudBase（国内部署）</span></div>
+        <div class="publish-status-row"><span class="publish-status-label">平台</span><span class="publish-tag">CloudBase 静态网站托管</span></div>
         <div class="publish-status-row"><span class="publish-status-label">环境</span><span class="publish-tag">${esc(cb.envId||'')}</span></div>
         <div class="publish-status-row"><span class="publish-status-label">状态</span><span class="publish-tag">已配置（尚未发布）</span></div>
       </div>
+      ${notVerified}
       <div class="publish-actions">
         ${btn('发布到 CloudBase')}
         <button class="publish-btn" id="publink-reconfig">重新配置</button>
-      </div>`;
+      </div>
+      ${cbLinksRowHtml()}`;
   } else {
     pb.innerHTML=`
-      <p class="publish-desc">CloudBase 是<b>国内部署的备选渠道</b>：服务器在国内，访客打开快，单文件大小限制很宽。</p>
-      ${warn}
+      <div class="publish-hint">${cbDocsHtml()}</div>
+      <div class="publish-hint">${cbSetupNotesHtml()}</div>
+      ${notVerified}
       <div class="publish-actions">
         <button class="publish-btn primary" id="publink-setup">填写腾讯云配置</button>
         <button class="publish-btn" id="publink-zip-from-cb">改用「导出 ZIP」（无需配置）</button>
@@ -4491,8 +4517,18 @@ function renderCloudBaseSection(pb, cb){
   }
 }
 
+// 「访问须知」：只陈述访问稳定性可能存在差异，不断言任何地区一定无法访问。
+// ⚠ 改这里必须同步 studio/studio.js 的同名文案。
+function ghAccessNoteHtml(){
+  return `<p class="publish-desc" style="margin-top:10px;font-size:12px;opacity:.72"><b>访问须知：</b>GitHub Pages 的公开链接在不同网络环境下的访问稳定性可能存在差异。如在你所在环境打开不畅，可改用「导出 ZIP」或 CloudBase，按实际访问环境选择合适的发布方式。</p>`;
+}
+
 async function renderGithubSection(pb, gh){
   if(!pb) return;
+  // ⚠ deployBtnHtml 定义在 renderPublicLink 作用域内，这里拿不到（曾导致 ReferenceError → 整个分区空白）。
+  // 改为读全局工厂 + 兜底，与 CloudBase 区保持一致。
+  const deployBtnHtml = window.__ffDeployBtnHtml
+    || ((l)=>`<button class="publish-btn primary" id="publink-deploy">${l}</button>`);
   let app={appConfigured:false}, status={connected:false, login:''};
   try{ app=await fetch('/api/github/app',{cache:'no-store'}).then(r=>r.json()); }catch(e){}
   try{ status=await fetch('/api/github/status',{cache:'no-store'}).then(r=>r.json()); }catch(e){}
@@ -4528,6 +4564,7 @@ async function renderGithubSection(pb, gh){
         <button class="publish-btn" id="publink-disconnect">断开 GitHub</button>
       </div>
       ${reauthWarn}${capWarn}
+      ${ghAccessNoteHtml()}
       <p class="publish-desc" style="margin-top:10px;font-size:12px;opacity:.72">更新会覆盖同一个公开地址，链接保持不变；大视频自动走 Release Assets。</p>`;
   } else if(status.connected){
     pb.innerHTML=`
@@ -4543,6 +4580,7 @@ async function renderGithubSection(pb, gh){
       </div>
       <p class="publish-desc" style="margin-top:10px;font-size:12px;opacity:.72">首次发布会在你的账号下自动创建 <code>${esc(status.login||'你')}.github.io</code> 仓库并启用 Pages，无需你手动配置。</p>
       <p class="publish-desc" style="font-size:12px;opacity:.72">「开发者选项」仅用于自建 OAuth App 的调试，普通用户不需要。</p>
+      ${ghAccessNoteHtml()}
       <div id="publink-gh-note" style="display:none"></div>`;
   } else {
     pb.innerHTML=`
@@ -4555,6 +4593,7 @@ async function renderGithubSection(pb, gh){
         <button class="publish-btn primary" id="publink-connect">连接 GitHub</button>
       </div>
       <p class="publish-desc" style="font-size:12px;opacity:.72"><a href="#" id="publink-github-adv">开发者选项</a>（自建 OAuth App 调试用，普通用户不需要）</p>
+      ${ghAccessNoteHtml()}
       <div id="publink-gh-device" style="display:none"></div>
       <div id="publink-gh-note" style="display:none"></div>`;
   }
@@ -4769,7 +4808,9 @@ function renderSetupForm(body, prefillName){
     <p class="publish-desc">填入你自己腾讯云 CloudBase 环境的凭证。这些值只有你本人能在腾讯云控制台看到，<b>只保存在这台电脑上</b>，不会进入作品集数据、网页或导出的 ZIP。</p>
     <div class="publish-hint">
       <p><b>去哪里拿：</b>① <b>EnvId</b>：腾讯云 CloudBase 控制台 → 环境概览 → 环境 ID（形如 <code>my-env-1a2b3c</code>）。② <b>SecretId / SecretKey</b>：腾讯云控制台 → 访问管理 CAM → API 密钥管理 → 新建密钥。</p>
+      <p class="publish-warn"><b>部署前还需要（都在腾讯云侧，FolioFrame 无法代做）：</b>① 完成实名认证；② 已创建 CloudBase 环境并<b>开通「静态网站托管」</b>；③ 本机已安装 CloudBase CLI（命令行 <code>npm install -g @cloudbase/cli</code>，或在「开发者选项」指定其路径；沙箱已自带）。填好下方凭证后，发布时会用密钥<b>自动非交互登录</b>，无需浏览器扫码。</p>
       <p class="publish-warn"><b>安全提醒：</b>SecretKey 相当于账号密码，请勿截图分享、勿提交到 Git。建议在 CAM 里为这个密钥只授予 CloudBase 相关权限，而不是主账号全权限。</p>
+      <p><b>官方文档：</b>${CB_OFFICIAL_LINKS}</p>
     </div>
     <label class="st-field-label" for="cb-env">EnvId（环境 ID）</label>
     <input class="publish-input" id="cb-env" placeholder="如 my-env-1a2b3c" autocomplete="off">
