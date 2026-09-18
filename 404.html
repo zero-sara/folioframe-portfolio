@@ -4383,21 +4383,129 @@ async function openPublishPanel(d){
 
 // —— 公开链接：根据 /api/deploy/status 渲染不同 UI，并接管「配置」与「发布到公网」 ——
 let __deployedAt = 0, __deployedProvider = null; // 最近一次成功发布的时刻/provider（按钮显示「✓ 已更新」）
+
+// ⚠⚠ 发布状态机必须放在**模块级**，不能只放在点击闭包里（2026-09-18 真实故障修复）。
+// 为什么：面板为了自愈（探针结论陈旧、大媒体后台进度）会整体重渲 provider 区，
+// 重渲会把按钮 / 进度条 / 错误行这些 DOM 节点整个换掉。状态若只挂在 DOM 或点击闭包上，
+// 就被一起抹掉 —— 用户看到的是「点一下闪一下、什么也没发生」，于是反复点击；
+// 更糟的是第二次点击会真的再发一次发布请求，两次发布并发互相踩（历史上造成过空站点事故）。
+// 放进模块级后：无论重渲多少次，第一下点击就立刻进入「发布中…」并一直显示到出结果。
+// 状态：idle（未发布）→ starting（已点击，正在提交请求）→ running（服务端已在传）
+//       → ok（成功，按钮变绿）/ error（失败，错误常驻显示）
+const PUBUI = { phase: 'idle', provider: '', detail: '', total: 0, sent: 0, pct: 0,
+                elapsed: 0, error: '', warnings: [], since: 0 };
+let __pubPollTimer = null;
+let __pubSetupOpen = false; // 凭证表单打开时禁止自愈重渲，否则用户填到一半的输入会被清空
+
+function pubuiBusy(){ return PUBUI.phase === 'starting' || PUBUI.phase === 'running'; }
+
+// 进度块：starting 阶段也要立刻显示（文案是「正在提交发布请求…」），
+// 这样"第一下点击"永远有反馈，不用等服务端把 job 建起来。
+function pubuiProgressHtml(){
+  if (!pubuiBusy()) return '';
+  const stage = PUBUI.detail || '正在提交发布请求…';
+  const t = PUBUI.elapsed ? '（已用 ' + Math.round(PUBUI.elapsed) + ' 秒）' : '';
+  const bar = PUBUI.total
+    ? '<div class="pub-prog-bar"><i style="width:' + PUBUI.pct + '%"></i></div><div class="pub-prog-pct">' + PUBUI.pct + '%</div>'
+    : '';
+  return '<div class="pub-progress" id="publink-progress"><div class="pub-prog-stage">' + esc(stage) + t + '</div>' + bar + '</div>';
+}
+
+// 失败原因常驻显示（不再只靠一闪而过的提示），且能扛住重渲。
+function pubuiErrorHtml(){
+  if (pubuiBusy() || PUBUI.phase !== 'error' || !PUBUI.error) return '';
+  let h = '<p class="publish-err" id="publink-err">发布失败：' + esc(PUBUI.error) + '</p>';
+  if (PUBUI.provider === 'cloudbase') {
+    h += '<p class="publish-desc">可以改用「<b>导出 ZIP</b>」：导出后把包直接拖到腾讯云的上传页，同样能拿到国内可访问的地址，且不需要配置密钥。</p>';
+  }
+  return h;
+}
+
+function pubuiMount(host){
+  if (!host) return;
+  const o1 = document.getElementById('publink-progress'); if (o1) o1.remove();
+  const o2 = document.getElementById('publink-err'); if (o2) o2.remove();
+  const h = pubuiProgressHtml() + pubuiErrorHtml();
+  if (h) host.insertAdjacentHTML('beforeend', h);
+}
+
+// 只更新进度块的文字/百分比（不动其它 DOM）——1.5 秒一次的轮询不能重渲整个面板，
+// 否则会闪、会丢滚动位置、会丢用户正在输入的凭证。
+function pubuiPaint(){
+  if (!pubuiBusy()) { const e = document.getElementById('publink-progress'); if (e) e.style.display = 'none'; return; }
+  let el = document.getElementById('publink-progress');
+  if (!el) {
+    const host = document.getElementById('publink-provider-body') || document.getElementById('publink-body');
+    if (!host) return;
+    host.insertAdjacentHTML('beforeend', '<div class="pub-progress" id="publink-progress"></div>');
+    el = document.getElementById('publink-progress');
+  }
+  if (!el) return;
+  const stage = PUBUI.detail || '正在提交发布请求…';
+  const t = PUBUI.elapsed ? '（已用 ' + Math.round(PUBUI.elapsed) + ' 秒）' : '';
+  const bar = PUBUI.total
+    ? '<div class="pub-prog-bar"><i style="width:' + PUBUI.pct + '%"></i></div><div class="pub-prog-pct">' + PUBUI.pct + '%</div>'
+    : '';
+  el.style.display = 'block';
+  el.innerHTML = '<div class="pub-prog-stage">' + esc(stage) + t + '</div>' + bar;
+}
+
+function pubuiStopPoll(){ if (__pubPollTimer) { clearInterval(__pubPollTimer); __pubPollTimer = null; } }
+
+function pubuiStartPoll(){
+  pubuiStopPoll();
+  const tick = async () => {
+    if (!pubuiBusy()) return;
+    // 客户端兜底：20 分钟还没有结果就收敛为失败，避免按钮永远卡在「发布中…」
+    // （服务端另有 15 分钟看门狗；这里只是防止请求本身断掉却没有回调的情况）。
+    if (Date.now() - PUBUI.since > 20 * 60 * 1000) {
+      PUBUI.phase = 'error';
+      PUBUI.error = '发布超过 20 分钟仍没有结果，已停止等待。请先打开公开网址确认页面是否已经更新：如果页面已经是新的，就不需要重新发布。';
+      pubuiStopPoll(); pubuiPaint(); return;
+    }
+    let s = { publish: {} };
+    try { s = await fetch('/api/deploy/status', { cache: 'no-store' }).then(r => r.json()); } catch (_) {}
+    const p = s.publish || {};
+    // ⚠ 只信任"本次"发布：只有当服务端 running 时才读它的阶段。
+    // 旧实现直接读 p.phase/p.ok，会显示**上一次**发布的遗留文案（甚至因为它 ok:true 而误判）。
+    if (p.running) {
+      PUBUI.phase = 'running';
+      PUBUI.detail = p.detail || p.phase || '发布中…';
+      PUBUI.total = p.total || 0;
+      PUBUI.sent = (p.sent != null) ? p.sent : 0;
+      PUBUI.pct = (p.total && p.sent != null) ? Math.max(0, Math.min(100, Math.round(p.sent / p.total * 100))) : 0;
+      PUBUI.elapsed = p.elapsed || 0;
+    } else if (PUBUI.phase === 'starting') {
+      PUBUI.detail = '正在提交发布请求…';
+    }
+    pubuiPaint();
+  };
+  __pubPollTimer = setInterval(tick, 1500);
+  tick();
+}
+
 async function renderPublicLink(dialog){
   const body=document.getElementById('publink-body');
   if(!body) return;
+  __pubSetupOpen = false;   // 能走到完整重渲，说明凭证表单已关闭
   let st={provider:'github', providers:{cloudbase:{configured:false,envId:'',publicUrl:''}, github:{configured:false,login:'',publicUrl:''}}, publicUrl:'', deployedAt:''};
   try{ st=await fetch('/api/deploy/status',{cache:'no-store'}).then(r=>r.json()); }catch(e){}
   if(!window.__pubProvider) window.__pubProvider = st.provider || 'github';
   const prov = window.__pubProvider==='cloudbase' ? 'cloudbase' : (window.__pubProvider==='zip' ? 'zip' : 'github');
   const cb = (st.providers&&st.providers.cloudbase)||{configured:false,envId:'',publicUrl:''};
   const gh = (st.providers&&st.providers.github)||{configured:false,login:'',publicUrl:''};
-  // 部署按钮：刚成功发布过且本次无媒体失败 → 显示「✓ 已更新 时:分」（绿色）；否则常规「更新/发布 FolioFrame」。
+  // 部署按钮：① 本次发布进行中 → 常驻「发布中…」+ 禁用（重渲也不会丢、也就无法重复点击）；
+  // ② 刚成功 → 绿色「✓ 已更新 时:分」；③ 否则常规文案。
   const muFailed = (st.mediaUpload && (st.mediaUpload.failed || []).filter(Boolean).length) || 0;
-  const justDeployed = !!__deployedAt && __deployedProvider === prov && !muFailed;
-  window.__ffDeployBtnHtml = (baseLabel) => justDeployed
-    ? `<button class="publish-btn primary st-done" id="publink-deploy">✓ 已更新 ${new Date(__deployedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</button>`
-    : `<button class="publish-btn primary" id="publink-deploy">${baseLabel}</button>`;
+  window.__ffDeployBtnHtml = (baseLabel) => {
+    if (pubuiBusy() && PUBUI.provider === prov) {
+      return `<button class="publish-btn primary" id="publink-deploy" disabled>发布中…</button>`;
+    }
+    const okGreen = PUBUI.phase === 'ok' && PUBUI.provider === prov && !muFailed;
+    return okGreen
+      ? `<button class="publish-btn primary st-done" id="publink-deploy">✓ 已更新 ${new Date(PUBUI.since).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</button>`
+      : `<button class="publish-btn primary" id="publink-deploy">${baseLabel}</button>`;
+  };
   const deployBtnHtml = window.__ffDeployBtnHtml;
   body.innerHTML = `
     <div class="publink-tabs">
@@ -4446,11 +4554,22 @@ function renderZipSection(pb){
 // ⚠ 改这里必须同步 studio/studio.js 的 stRenderCloudBaseSection / stRenderCloudBaseSetup。
 const CB_OFFICIAL_LINKS = '<a href="https://cloud.tencent.com/document/product/876/46900" target="_blank" rel="noopener">静态网站托管 ↗</a>　'
   + '<a href="https://cloudbase.net/pricing" target="_blank" rel="noopener">定价与套餐说明 ↗</a>';
+// 腾讯云控制台**直达**链接。2026-09-18 逐个 curl 校验过：未登录时会 302 到腾讯云登录页，
+// 登录后直达目标页（不是编造的地址）。没有这些链接，用户会卡在"环境 ID 去哪找"。
+// ⚠ 改这里必须同步 studio/studio.js 的 stCbConsoleLinks。
+const CB_CONSOLE_LINKS = {
+  env:     'https://console.cloud.tencent.com/tcb/env/index', // 环境列表（新建 / 看环境 ID）
+  hosting: 'https://console.cloud.tencent.com/tcb/hosting',   // 静态网站托管（需在环境里开通）
+  cam:     'https://console.cloud.tencent.com/cam/capi',      // 访问管理 → API 密钥管理
+  verify:  'https://console.cloud.tencent.com/developer',     // 账号信息 → 实名认证
+};
+function cbLink(url, text){ return '<a href="' + url + '" target="_blank" rel="noopener">' + text + '</a>'; }
 function cbDocsHtml(){
   return `<p><b>用途：</b>腾讯云 CloudBase 静态网站托管，可将当前作品集部署到国内节点。</p>
       <p><b>能力：</b>静态网页托管、CDN 分发与 HTTPS；支持网页、图片及媒体资源的部署。</p>
       <p><b>需要：</b>腾讯云账号、已完成实名认证、已创建 CloudBase 环境。</p>
       <p><b>规格：</b>服务规格、配额、计费与限制，以腾讯云官方最新规则为准。</p>
+      <p><b>去哪配置（直达）：</b>${cbLink(CB_CONSOLE_LINKS.env,'CloudBase 控制台 ↗')}　${cbLink(CB_CONSOLE_LINKS.cam,'API 密钥管理 ↗')}　${cbLink(CB_CONSOLE_LINKS.hosting,'静态网站托管 ↗')}</p>
       <p><b>官方文档：</b>${CB_OFFICIAL_LINKS}</p>`;
 }
 function cbSetupNotesHtml(){
@@ -4510,6 +4629,7 @@ function renderCloudBaseSection(pb, cb){
       ${notVerified}
       <div class="publish-actions">
         <button class="publish-btn primary" id="publink-setup">填写腾讯云配置</button>
+        <a class="publish-btn" href="${CB_CONSOLE_LINKS.cam}" target="_blank" rel="noopener">去腾讯云拿 API 密钥 ↗</a>
         <button class="publish-btn" id="publink-zip-from-cb">改用「导出 ZIP」（无需配置）</button>
       </div>`;
     const z=document.getElementById('publink-zip-from-cb');
@@ -4536,7 +4656,11 @@ async function renderGithubSection(pb, gh){
   if (status.probeStale) {
     if ((window.__ghProbeRetry || 0) < 4) {
       window.__ghProbeRetry = (window.__ghProbeRetry || 0) + 1;
-      setTimeout(() => { const d = document.getElementById('publish-dialog'); if (d && d.open) renderPublicLink(d); }, 2500);
+      // 自愈重渲只在"用户没有正在操作"时做：凭证表单开着、或发布进行中都不重渲，
+      // 否则用户填到一半的输入会被清空、进度/按钮会闪一下（真实反馈 2026-09-18）。
+      if (!__pubSetupOpen && !pubuiBusy()) {
+        setTimeout(() => { const d = document.getElementById('publish-dialog'); if (d && d.open) renderPublicLink(d); }, 2500);
+      }
     }
   } else { window.__ghProbeRetry = 0; }
   // 警告判据来自服务端的**真实 API 探测**（canCreateRepo），不再靠令牌前缀猜。
@@ -4732,7 +4856,10 @@ function wirePublicLink(dialog, st){
     const mp=document.createElement('p'); mp.className='publish-warn';
     mp.textContent='⏳ 大媒体后台上传中：'+done+'/'+total+'（'+pct+'%）'+(mu.current?' · 正在传 '+mu.current:'')+'。站点已经可以访问，上传完成后视频即可播放，不用重新发布。';
     host.appendChild(mp);
-    if((window.__pubMediaRetry||0)<240){ window.__pubMediaRetry=(window.__pubMediaRetry||0)+1; setTimeout(()=>renderPublicLink(dialog),5000); }
+    if((window.__pubMediaRetry||0)<240){ window.__pubMediaRetry=(window.__pubMediaRetry||0)+1;
+      // 自愈重渲只在没有用户交互时做：凭证表单开着（用户可能在输入）或发布进行中（进度由 pubuiPaint 更新）都跳过，
+      // 否则会把输入清空 / 画面闪一下。
+      if(!__pubSetupOpen && !pubuiBusy()) setTimeout(()=>renderPublicLink(dialog),5000); }
   } else {
     window.__pubMediaRetry=0;
     const fails=((mu.failed)||[]).filter(Boolean);
@@ -4751,64 +4878,56 @@ function wirePublicLink(dialog, st){
     const i=document.getElementById('publink-url');
     if(i&&i.value){ try{await navigator.clipboard.writeText(i.value);}catch(_){i.select();document.execCommand&&document.execCommand('copy');} copy.textContent='已复制'; }
   };
+  // 进度块 / 失败原因由模块级 PUBUI 复原：即使面板刚刚被自愈重渲过，也能把状态重新贴回来。
+  pubuiMount(host);
   const deploy=document.getElementById('publink-deploy');
   if(deploy) deploy.onclick=async()=>{
     const provider = window.__pubProvider==='cloudbase' ? 'cloudbase' : 'github';
-    const baseLabel = provider==='github' ? '更新 FolioFrame' : '发布到 CloudBase';
+    // 已经在发布中：直接忽略（按钮本身也是 disabled 的，这里是双保险）。
+    // 绝不能再发一次 —— 两次发布并发会互相覆盖，历史上出过"线上变空站点"的事故。
+    if(pubuiBusy()) return;
+    // ① 立刻进入"发布中"，同步渲染，不依赖任何异步 —— 第一下点击就必须有反馈。
+    PUBUI.phase='starting'; PUBUI.provider=provider; PUBUI.detail='正在提交发布请求…';
+    PUBUI.error=''; PUBUI.total=0; PUBUI.sent=0; PUBUI.pct=0; PUBUI.elapsed=0;
+    PUBUI.warnings=[]; PUBUI.since=Date.now();
     deploy.disabled=true; deploy.textContent='发布中…';
-    const prog=document.createElement('div');
-    prog.id='publink-progress'; prog.className='pub-progress'; prog.style.display='none';
-    host.appendChild(prog);
-    let progTimer=null;
-    const tick=async()=>{
-      let s={publish:{}};
-      try{ s=await (await fetch('/api/deploy/status',{cache:'no-store'})).json(); }catch(e){}
-      const p=s.publish||{};
-      if(!p.running && !p.ok){ prog.style.display='none'; return; }
-      prog.style.display='block';
-      const pct=(p.total && p.sent!=null)?Math.max(0,Math.min(100,Math.round(p.sent/p.total*100))):0;
-      const stage=p.detail||p.phase||'发布中…';
-      const t=p.elapsed?'（已用 '+Math.round(p.elapsed)+' 秒）':'';
-      prog.innerHTML='<div class="pub-prog-stage">'+esc(stage)+t+'</div>'
-        +(p.total?'<div class="pub-prog-bar"><i style="width:'+pct+'%"></i></div><div class="pub-prog-pct">'+pct+'%</div>':'');
-    };
-    progTimer=setInterval(tick,1500); tick();
+    pubuiMount(host); pubuiPaint();
+    pubuiStartPoll();
     try{
       const r=await fetch('/api/deploy/public',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider})}).then(x=>x.json());
-      clearInterval(progTimer); prog.style.display='none';
       if(!r.ok){
+        if(r.busy) throw Error(r.error||'上一次发布还在进行中，请等它结束再点（避免两次发布互相覆盖）。');
         if(r.setupRequired) throw Error(r.error||'尚未配置');
         if(r.mediaBlocked) throw Error(r.error||'媒体文件过大');
         throw Error(r.error||'发布失败');
       }
-      __deployedAt = Date.now(); __deployedProvider = provider; // 标记已发布 → 按钮显示「✓ 已更新」
-      await renderPublicLink(dialog);
+      PUBUI.phase='ok'; PUBUI.detail=''; PUBUI.since=Date.now(); PUBUI.warnings=(r.warnings||[]);
+      __deployedAt=PUBUI.since; __deployedProvider=provider; // 兼容旧标记
+    }catch(e){
+      PUBUI.phase='error'; PUBUI.error=String(e.message||e);
+    }finally{
+      pubuiStopPoll();
+      await renderPublicLink(dialog);   // 按最终状态重渲：成功→绿色按钮；失败→红色原因常驻
       // 发布成功但大媒体没传上去：站点已经上线，必须如实告诉用户"哪个文件暂时是空的"，
       // 而不是让整次发布看起来失败（旧行为：release 上传超时 → 整条发布报失败，网址也不显示）。
-      (r.warnings||[]).forEach(w=>{
+      (PUBUI.warnings||[]).forEach(w=>{
         const wn=document.createElement('p'); wn.className='publish-warn'; wn.textContent='⚠ '+w; host.appendChild(wn);
       });
-    }catch(e){
-      clearInterval(progTimer); prog.style.display='none';
-      deploy.disabled=false; deploy.textContent= baseLabel;
-      const err=document.createElement('p'); err.className='publish-err'; err.textContent='发布失败：'+e.message;
-      host.appendChild(err);
-      // CloudBase 未完成自动部署时，明确给出可行动替代路径，而不是让用户卡在这。
-      if(provider==='cloudbase'){
-        const alt=document.createElement('p'); alt.className='publish-desc';
-        alt.innerHTML='可以改用「<b>导出 ZIP</b>」：导出后把包直接拖到腾讯云的上传页，同样能拿到国内可访问的地址，且不需要配置密钥。';
-        host.appendChild(alt);
-      }
     }
   };
 }
 
 function renderSetupForm(body, prefillName){
+  __pubSetupOpen = true;   // 表单开着期间禁止自愈重渲，否则用户填到一半的内容会被清空
   body.innerHTML=`
     <p class="publish-desc">填入你自己腾讯云 CloudBase 环境的凭证。这些值只有你本人能在腾讯云控制台看到，<b>只保存在这台电脑上</b>，不会进入作品集数据、网页或导出的 ZIP。</p>
     <div class="publish-hint">
-      <p><b>去哪里拿：</b>① <b>EnvId</b>：腾讯云 CloudBase 控制台 → 环境概览 → 环境 ID（形如 <code>my-env-1a2b3c</code>）。② <b>SecretId / SecretKey</b>：腾讯云控制台 → 访问管理 CAM → API 密钥管理 → 新建密钥。</p>
-      <p class="publish-warn"><b>部署前还需要（都在腾讯云侧，FolioFrame 无法代做）：</b>① 完成实名认证；② 已创建 CloudBase 环境并<b>开通「静态网站托管」</b>；③ 本机已安装 CloudBase CLI（命令行 <code>npm install -g @cloudbase/cli</code>，或在「开发者选项」指定其路径；沙箱已自带）。填好下方凭证后，发布时会用密钥<b>自动非交互登录</b>，无需浏览器扫码。</p>
+      <p><b>去哪里拿（点下面的链接直达腾讯云控制台）：</b></p>
+      <p>① <b>EnvId（环境 ID）</b>：打开 ${cbLink(CB_CONSOLE_LINKS.env, 'CloudBase 控制台 → 环境列表 ↗')}。还没有环境就点「新建环境」；环境建好后在「环境概览」里可以直接复制环境 ID（形如 <code>my-env-1a2b3c</code>）。</p>
+      <p>② <b>SecretId / SecretKey</b>：打开 ${cbLink(CB_CONSOLE_LINKS.cam, '访问管理 → API 密钥管理 ↗')} → 「新建密钥」。SecretKey <b>只在创建时显示一次</b>，请当场复制保存。</p>
+      <p>③ 如果控制台提示未实名：去 ${cbLink(CB_CONSOLE_LINKS.verify, '账号信息 → 实名认证 ↗')}（未实名无法创建环境）。</p>
+      <p>④ 还要在你的环境里开通「${cbLink(CB_CONSOLE_LINKS.hosting, '静态网站托管 ↗')}」，否则发布会失败。</p>
+      <p class="publish-warn"><b>发布时还需要（本机侧）：</b>已安装 CloudBase CLI（命令行 <code>npm install -g @cloudbase/cli</code>，或在「开发者选项」里指定它的路径；本机沙箱已自带）。填好下方凭证后，发布时会用密钥<b>自动非交互登录</b>，不需要浏览器扫码。</p>
       <p class="publish-warn"><b>安全提醒：</b>SecretKey 相当于账号密码，请勿截图分享、勿提交到 Git。建议在 CAM 里为这个密钥只授予 CloudBase 相关权限，而不是主账号全权限。</p>
       <p><b>官方文档：</b>${CB_OFFICIAL_LINKS}</p>
     </div>
@@ -4825,7 +4944,7 @@ function renderSetupForm(body, prefillName){
       <button class="publish-btn primary" id="publink-save-cfg">保存配置</button>
     </div>`;
   const cancel=document.getElementById('publink-cancel-cfg');
-  if(cancel) cancel.onclick=()=>{ window.__pubProvider='cloudbase'; renderPublicLink(document.getElementById('publish-dialog')); };
+  if(cancel) cancel.onclick=()=>{ __pubSetupOpen=false; window.__pubProvider='cloudbase'; renderPublicLink(document.getElementById('publish-dialog')); };
   document.getElementById('publink-save-cfg').onclick=async()=>{
     const envId=(document.getElementById('cb-env').value||'').trim();
     const sid=(document.getElementById('cb-sid').value||'').trim();
@@ -4836,6 +4955,7 @@ function renderSetupForm(body, prefillName){
     try{
       const r=await fetch('/api/deploy/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:'cloudbase',envId:envId,secretId:sid,secretKey:skey,path:path})}).then(x=>x.json());
       if(!r.ok)throw Error(r.error||'保存失败');
+      __pubSetupOpen=false;
       await renderPublicLink(document.getElementById('publish-dialog'));
     }catch(e){ alert('保存失败：'+e.message); btn.disabled=false; btn.textContent='保存配置'; }
   };
